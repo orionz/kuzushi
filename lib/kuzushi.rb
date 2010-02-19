@@ -33,6 +33,7 @@ class Kuzushi
 		process :raids
 		process :mounts
 		process :files
+		process :users
 
 		script get("after")
 	end
@@ -59,12 +60,7 @@ class Kuzushi
 	def process_packages
 		@packages = get_array("packages")
 		task "install packages" do
-			cmd = <<SHELL
-apt-get update
-apt-get upgrade -y
-apt-get install -y #{@packages.join(" ")}
-SHELL
-			shell cmd, :DEBIAN_FRONTEND => "noninteractive", :DEBIAN_PRIORITY => "critical"
+			shell "apt-get update && apt-get upgrade -y && apt-get install -y #{@packages.join(" ")}", "DEBIAN_FRONTEND" => "noninteractive", "DEBIAN_PRIORITY" => "critical"
 		end
 	end
 
@@ -101,7 +97,7 @@ SHELL
 
 	def process_mounts(m)
 		task "mount #{m.label}" do
-			shell "mount -L #{m.label} #{m.label} -o #{m.options}"
+			shell "mount -o #{m.options} -L #{m.label} #{m.label}"
 		end
 	end
 
@@ -111,6 +107,14 @@ SHELL
 				shell "erb #{f.template} > #{f.file}" ## FIXME
 			end
 		end
+	end
+
+	def process_users(user)
+		(user.authorized_keys || []).each do |key|
+			task "add authorized_key for user #{user.name}" do
+				shell "su - #{user.name} -c 'mkdir -p .ssh; echo \"#{key}\" >> .ssh/authorized_keys; chmod -R 600 .ssh'"
+			end
+		end 
 	end
 
 	def set_scheduler(v)
