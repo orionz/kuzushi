@@ -2,5 +2,12 @@
 
 require File.dirname(__FILE__) + '/../lib/kuzushi'
 
-Kuzushi.new
+usage = "usage: kuzushi start URL"
+
+fail(usage) unless ARGV.length == 2
+fail(usage) unless ARGV[0] == "start"
+
+url = ARGV[1]
+
+Kuzushi.new(url).start
 
