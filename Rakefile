@@ -10,7 +10,9 @@ Jeweler::Tasks.new do |s|
 #	s.rubyforge_project = "sumo"
 	s.files = FileList["[A-Z]*", "{bin,lib,spec}/**/*"]
 	s.executables = %w(kuzushi)
-	s.add_dependency "json rest-client"
+	s.add_dependency "rest-client"
+	s.add_dependency "json"
+	s.add_dependency "rush"
 end
 
 Jeweler::RubyforgeTasks.new

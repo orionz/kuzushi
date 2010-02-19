@@ -2,6 +2,7 @@ require 'rubygems'
 require 'json'
 require 'restclient'
 require 'ostruct'
+require 'rush'
 
 class Kuzushi
 	def initialize(url)
@@ -12,6 +13,7 @@ class Kuzushi
 		@packages = []
 		@tasks = []
 		load_config_stack(@name)
+		@merge = @config.reverse.inject({}) { |i,c| i.merge(c) }
 		process_stack
 	end
 
@@ -97,7 +99,7 @@ class Kuzushi
 
 	def process_mounts(m)
 		task "mount #{m.label}" do
-			shell "mount -o #{m.options} -L #{m.label} #{m.label}"
+			shell "mkdir -p #{m.label} && mount -o #{m.options} -L #{m.label} #{m.label}"
 		end
 	end
 
@@ -112,7 +114,7 @@ class Kuzushi
 	def process_users(user)
 		(user.authorized_keys || []).each do |key|
 			task "add authorized_key for user #{user.name}" do
-				shell "su - #{user.name} -c 'mkdir -p .ssh; echo \"#{key}\" >> .ssh/authorized_keys; chmod -R 600 .ssh'"
+				shell "su - #{user.name} -c 'mkdir -p .ssh; echo \"#{key}\" >> .ssh/authorized_keys; chmod -R 0600 .ssh'"
 			end
 		end 
 	end
@@ -164,7 +166,7 @@ class Kuzushi
 		file = "#{tmp_dir}/#{File.basename(file)}"
 		File.open(file,"w") do |f|
 			f.write(content)
-			f.chmod(700)
+			f.chmod(0700)
 		end if content
 		block.call(file) if block
 		file
@@ -190,7 +192,7 @@ class Kuzushi
 	end
 
 	def get(key)
-		@config.map { |c| c[key.to_s] }.detect { |v| v }
+		@merge[key.to_s]
 	end
 
 	def get_array(key)
@@ -198,7 +200,10 @@ class Kuzushi
 	end
 
 	def wait_for_volume(vol)
-		puts "waiting for volume #{vol}"
+		until File.exists?("/sys/block/#{File.basename(vol)}") do
+			puts "waiting for volume #{vol}"
+			sleep 2
+		end
 	end
 
 	def start
@@ -211,7 +216,8 @@ class Kuzushi
 	end
 
 	def shell(cmd, env = {})
-		puts "  SHELL: #{cmd}"
+		puts "# #{cmd}"
+		puts Rush.bash cmd, :env => env
 	end
 
 	def task(description, &blk)
