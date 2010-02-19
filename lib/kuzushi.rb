@@ -194,10 +194,7 @@ class Kuzushi
 	end
 
 	def get_array(key)
-		d = get(key)
-		return []  if d.nil?
-		return d   if d.is_a?(Array)
-		return [d]
+		[ get(key) || [] ].flatten
 	end
 
 	def wait_for_volume(vol)
