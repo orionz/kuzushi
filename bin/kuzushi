@@ -5,9 +5,14 @@ require File.dirname(__FILE__) + '/../lib/kuzushi'
 usage = "usage: kuzushi start URL"
 
 fail(usage) unless ARGV.length == 2
-fail(usage) unless ARGV[0] == "start"
 
-url = ARGV[1]
+kuzushi = Kuzushi.new(ARGV[1])
 
-Kuzushi.new(url).start
+if ARGV[0] == "start"
+        kuzushi.start
+elsif ARGV[0] == "init"
+        kuzushi.start
+else
+        fail(usage)
+end
 
