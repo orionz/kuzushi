@@ -11,7 +11,7 @@ kuzushi = Kuzushi.new(ARGV[1])
 if ARGV[0] == "start"
         kuzushi.start
 elsif ARGV[0] == "init"
-        kuzushi.start
+        kuzushi.init
 else
         fail(usage)
 end

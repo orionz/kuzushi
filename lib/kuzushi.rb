@@ -149,7 +149,7 @@ class Kuzushi
 	end
 
 	def mounted?(dev)
-		!!system.filesystem[dev]["mount"]
+		!!system.filesystem[File.basename(dev)]["mount"] rescue false
 	end
 
 	def package_arch
@@ -161,7 +161,7 @@ class Kuzushi
 			task "setting up #{f.file}" do
 				@system = system
 				t = ERB.new File.read(file), 0, '<>'
-				File.open(f.file,"w") { |f| f.write(t.render) }
+				File.open(f.file,"w") { |f| f.write(t.result) }
 			end
 		end
 	end
@@ -189,7 +189,7 @@ class Kuzushi
 	def handle_format(v)
 		task "formatting #{v.device}", :init => true do
 			label = "-L " + v.label rescue ""
-			"mkfs.#{v.format} #{label} #{v.device}"
+			shell "mkfs.#{v.format} #{label} #{v.device}"
 		end
 		add_package "xfsprogs" if v.format == "xfs"
 	end
