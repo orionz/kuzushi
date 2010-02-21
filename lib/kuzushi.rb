@@ -161,7 +161,7 @@ class Kuzushi
 			task "setting up #{f.file}" do
 				@system = system
 				t = ERB.new File.read(file), 0, '<>'
-				File.open(f.file,"w") { |f| f.write(t.result) }
+				File.open(f.file,"w") { |f| f.write(t.result(binding)) }
 			end
 		end
 	end
