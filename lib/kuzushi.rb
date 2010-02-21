@@ -3,24 +3,53 @@ require 'json'
 require 'restclient'
 require 'ostruct'
 require 'rush'
+require 'ohai'
+require 'erb'
+
+## IDEAS
+
+## firewall until ready
+## ruby 1.9 compatibility
 
 class Kuzushi
 	def initialize(url)
 		@base_url = File.dirname(url)
 		@name = File.basename(url)
 		@config_names = []
-		@config = []
+		@configs = []
 		@packages = []
 		@tasks = []
 		load_config_stack(@name)
-		@merge = @config.reverse.inject({}) { |i,c| i.merge(c) }
+		@config = @configs.reverse.inject({}) { |i,c| i.merge(c) }
+	end
+
+	def init
+		@init = true
+		start
+	end
+
+	def start
 		process_stack
+		puts "----"
+		@tasks.each do |t|
+			puts "TASK: #{t[:description]}"
+			t[:blk].call
+		end
+		puts "----"
+	end
+
+	protected
+
+	def system
+		ohai = Ohai::System.new
+		ohai.all_plugins
+		ohai
 	end
 
 	def load_config_stack(name)
 		@config_names << name
-		@config << JSON.parse(RestClient.get("#{@base_url}/#{name}"))
-		if import = @config.last["import"]
+		@configs << JSON.parse(RestClient.get("#{@base_url}/#{name}"))
+		if import = @configs.last["import"]
 			load_config_stack(import)
 		end
 	end
@@ -32,12 +61,11 @@ class Kuzushi
 		process :local_packages
 		process :gems
 		process :volumes
-		process :raids
-		process :mounts
 		process :files
 		process :users
 
 		script get("after")
+		script get("init") if init?
 	end
 
 	## magic goes here
@@ -55,6 +83,7 @@ class Kuzushi
 					send("process_#{type}", item)
 				end
 				script item["after"]
+				script item["init"] if init?
 			end
 		end
 	end
@@ -62,7 +91,7 @@ class Kuzushi
 	def process_packages
 		@packages = get_array("packages")
 		task "install packages" do
-			shell "apt-get update && apt-get upgrade -y && apt-get install -y #{@packages.join(" ")}", "DEBIAN_FRONTEND" => "noninteractive", "DEBIAN_PRIORITY" => "critical"
+			shell "apt-get update && apt-get upgrade -y && apt-get install -y #{@packages.join(" ")}"
 		end
 	end
 
@@ -81,32 +110,58 @@ class Kuzushi
 	end
 
 	def process_volumes(v)
+		handle_ebs    v if v.type == "ebs"
+		handle_raid   v if v.type == "raid"
+		set_readahead v if v.readahead
+		set_scheduler v if v.scheduler
+		handle_format v if v.format
+		handle_mount  v if v.mount
+	end
+
+	def handle_ebs(v)
 		task "wait for volume #{v.device}" do
 			wait_for_volume v.device
 		end
-		set_scheduler(v)
-		check_format(v)
 	end
 
-	def process_raids(r)
-		task "assemble raid #{r.device}" do
-			shell "mdadm --assemble #{r.device} #{r.drives.join(" ")}"
+	def handle_raid(r)
+		task "create raid #{r.device}", :init => true do
+			shell "mdadm --create #{r.device} -n #{r.drives.size} -l #{r.level} -c #{r.chunksize || 64} #{r.drives.join(" ")}"
 		end
-		set_scheduler r
-		check_format r
+		task "assemble raid #{r.device}" do  ## assemble fails a lot with device busy - is udev to blame :(
+			if not dev_exists? r.device
+				shell "service stop udev"
+				shell "mdadm --assemble #{r.device} #{r.drives.join(" ")}"
+				shell "service start udev"
+			end
+		end
 		add_package "mdadm"
 	end
 
-	def process_mounts(m)
-		task "mount #{m.label}" do
-			shell "mkdir -p #{m.label} && mount -o #{m.options} -L #{m.label} #{m.label}"
+	def handle_mount(m)
+		task "mount #{m.device}" do
+			shell "mkdir -p #{m.mount} && mount -o #{m.options || "noatime"} #{m.device} #{m.mount}" unless mounted?(m.device)
 		end
+	end
+
+	def system_arch
+		system.kernel["machine"]
+	end
+
+	def mounted?(dev)
+		!!system.filesystem[dev]["mount"]
+	end
+
+	def package_arch
+		`dpkg --print-architecture`.chomp
 	end
 
 	def process_files(f)
 		fetch("/templates/#{f.template}") do |file|
 			task "setting up #{f.file}" do
-				shell "erb #{f.template} > #{f.file}" ## FIXME
+				@system = system
+				t = ERB.new File.read(file), 0, '<>'
+				File.open(f.file,"w") { |f| f.write(t.render) }
 			end
 		end
 	end
@@ -116,18 +171,26 @@ class Kuzushi
 			task "add authorized_key for user #{user.name}" do
 				shell "su - #{user.name} -c 'mkdir -p .ssh; echo \"#{key}\" >> .ssh/authorized_keys; chmod -R 0600 .ssh'"
 			end
-		end 
-	end
-
-	def set_scheduler(v)
-		if v.scheduler
-			task "set scheduler for #{v.device}" do
-				shell "echo #{v.scheduler} > /sys/block/#{File.basename(v.device)}/queue/scheduler"
-			end
 		end
 	end
 
-	def check_format(v)
+	def set_readahead(v)
+		task "set readahead for #{v.device}" do
+			shell "blockdev --setra #{v.readahead} #{v.device}"
+		end
+	end
+
+	def set_scheduler(v)
+		task "set scheduler for #{v.device}" do
+			shell "echo #{v.scheduler} > /sys/block/#{File.basename(v.device)}/queue/scheduler"
+		end
+	end
+
+	def handle_format(v)
+		task "formatting #{v.device}", :init => true do
+			label = "-L " + v.label rescue ""
+			"mkfs.#{v.format} #{label} #{v.device}"
+		end
 		add_package "xfsprogs" if v.format == "xfs"
 	end
 
@@ -136,7 +199,7 @@ class Kuzushi
 	end
 
 	def package(p, &block)
-		fetch("/packages/#{p}_i386.deb") do |file|
+		fetch("/packages/#{p}_#{package_arch}.deb") do |file|
 			block.call(file)
 		end
 	end
@@ -192,7 +255,7 @@ class Kuzushi
 	end
 
 	def get(key)
-		@merge[key.to_s]
+		@config[key.to_s]
 	end
 
 	def get_array(key)
@@ -200,31 +263,28 @@ class Kuzushi
 	end
 
 	def wait_for_volume(vol)
-		until File.exists?("/sys/block/#{File.basename(vol)}") do
+		## Maybe use ohai here instead -- FIXME
+		until dev_exists? vol do
 			puts "waiting for volume #{vol}"
 			sleep 2
 		end
 	end
 
-	def start
-		puts "----"
-		@tasks.each do |t|
-			puts "TASK: #{t[:description]}"
-			t[:blk].call
-		end
-		puts "----"
-	end
-
-	def shell(cmd, env = {})
+	def shell(cmd)
 		puts "# #{cmd}"
-		puts Rush.bash cmd, :env => env
+		puts Rush.bash cmd
 	end
 
-	def task(description, &blk)
+	def init?
+		@init ||= false
+	end
+
+	def task(description, options = {} &blk)
+		return if options[:init] and not init?
 		@tasks << { :description => description, :blk => blk }
 	end
 
-	def path
-		Dir["**/config.json"]
+	def dev_exists?(dev)
+		File.exists?("/sys/block/#{File.basename(dev)}")
 	end
 end

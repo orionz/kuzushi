@@ -13,6 +13,7 @@ Jeweler::Tasks.new do |s|
 	s.add_dependency "rest-client"
 	s.add_dependency "json"
 	s.add_dependency "rush"
+	s.add_dependency "ohai"
 end
 
 Jeweler::RubyforgeTasks.new
