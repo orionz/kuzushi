@@ -110,8 +110,8 @@ class Kuzushi
 	end
 
 	def process_volumes(v)
-		handle_ebs    v if v.type == "ebs"
-		handle_raid   v if v.type == "raid"
+		handle_ebs    v if v.media == "ebs"
+		handle_raid   v if v.media == "raid"
 		set_readahead v if v.readahead
 		set_scheduler v if v.scheduler
 		handle_format v if v.format
@@ -279,7 +279,7 @@ class Kuzushi
 		@init ||= false
 	end
 
-	def task(description, options = {} &blk)
+	def task(description, options = {}, &blk)
 		return if options[:init] and not init?
 		@tasks << { :description => description, :blk => blk }
 	end
