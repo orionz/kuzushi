@@ -12,7 +12,6 @@ Jeweler::Tasks.new do |s|
 	s.executables = %w(kuzushi)
 	s.add_dependency "rest-client"
 	s.add_dependency "json"
-	s.add_dependency "rush"
 	s.add_dependency "ohai"
 end
 

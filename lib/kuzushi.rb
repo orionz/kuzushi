@@ -92,7 +92,7 @@ class Kuzushi
 		@packages = get_array("packages")
 		task "install packages" do
 			shell "apt-get update && apt-get upgrade -y"
-			shell "apt-get install -y #{@packages.join(" ")}" if @packages.empty?
+			shell "apt-get install -y #{@packages.join(" ")}" unless @packages.empty?
 		end
 	end
 
@@ -111,7 +111,6 @@ class Kuzushi
 	end
 
 	def process_volumes(v)
-		handle_tmpfs  v if v.media == "tmpfs"
 		handle_ebs    v if v.media == "ebs"
 		handle_raid   v if v.media == "raid"
 		set_readahead v if v.readahead
@@ -149,15 +148,13 @@ class Kuzushi
 		o.join(",")
 	end
 
-	def handle_tmpfs(m)
-		task "mount #{m.mount}" do
-			shell "mkdir -p #{m.mount} && mount -o #{mount_options(m)} -t tmpfs tmpfs #{m.mount}" unless mounted?(m.mount)
-		end
-	end
-
 	def handle_mount(m)
 		task "mount #{m.mount}" do
-			shell "mkdir -p #{m.mount} && mount -o #{mount_options(m)} #{m.device} #{m.mount}" unless mounted?(m.mount)
+			unless mounted?(m.mount)
+				shell "mv #{m.mount} #{m.mout}.old" if File.exists?(m.mount)
+				shell "mkdir -p #{m.mount} && mount -o #{mount_options(m)} -t #{m.format || m.media} #{m.device || m.media} #{m.mount}"
+				shell "chown -R #{m.user}:#{m.group} #{m.mount}" if m.user or m.group
+			end
 		end
 	end
 
@@ -176,12 +173,24 @@ class Kuzushi
 	end
 
 	def process_files(f)
-		fetch("/templates/#{f.template}") do |file|
-			task "setting up #{f.file}" do
+		if f.template
+			write_file("/templates/#{f.template}", f.file) do |file|
 				@system = system
 				t = ERB.new File.read(file), 0, '<>'
-				File.open(f.file,"w") { |f| f.write(t.result(binding)) }
+				t.result(binding)
 			end
+		else
+			src = f.source || File.basename(f.file)
+			write_file("/files/#{src}", f.file) do |file|
+				File.read(file)
+			end
+		end
+	end
+
+	def write_file(src, dest, &blk)
+		fetch(src) do |file|
+			FileUtils.mkdir_p(File.dirname(dest))
+			File.open(dest,"w") { |f| f.write(blk.call(file)) }
 		end
 	end
 
@@ -206,9 +215,10 @@ class Kuzushi
 	end
 
 	def handle_format(v)
+		return if v.format == "tmpfs"
 		task "formatting #{v.device}", :init => true do
 			label = "-L " + v.label rescue ""
-			shell "mkfs.#{v.format} #{label} #{v.device}"
+			shell "mkfs.#{v.format} #{label} #{v.device}" unless v.mount && mounted?(v.mount)
 		end
 		add_package "xfsprogs" if v.format == "xfs"
 	end
@@ -292,7 +302,7 @@ class Kuzushi
 
 	def shell(cmd)
 		puts "# #{cmd}"
-		puts Rush.bash cmd
+		puts Kernel.system cmd ## FIXME - need to handle/report exceptions here
 	end
 
 	def init?
