@@ -91,7 +91,8 @@ class Kuzushi
 	def process_packages
 		@packages = get_array("packages")
 		task "install packages" do
-			shell "apt-get update && apt-get upgrade -y && apt-get install -y #{@packages.join(" ")}"
+			shell "apt-get update && apt-get upgrade -y"
+			shell "apt-get install -y #{@packages.join(" ")}" if @packages.empty?
 		end
 	end
 
@@ -110,6 +111,7 @@ class Kuzushi
 	end
 
 	def process_volumes(v)
+		handle_tmpfs  v if v.media == "tmpfs"
 		handle_ebs    v if v.media == "ebs"
 		handle_raid   v if v.media == "raid"
 		set_readahead v if v.readahead
@@ -138,9 +140,24 @@ class Kuzushi
 		add_package "mdadm"
 	end
 
+	def mount_options(m)
+		o = []
+		o << m.options if m.options
+		o << "size=#{m.size}M" if m.size and m.media == "tmpfs"
+		o << "mode=#{m.mode}" if m.mode
+		o << "noatime" if o.empty?
+		o.join(",")
+	end
+
+	def handle_tmpfs(m)
+		task "mount #{m.mount}" do
+			shell "mkdir -p #{m.mount} && mount -o #{mount_options(m)} -t tmpfs tmpfs #{m.mount}" unless mounted?(m.mount)
+		end
+	end
+
 	def handle_mount(m)
-		task "mount #{m.device}" do
-			shell "mkdir -p #{m.mount} && mount -o #{m.options || "noatime"} #{m.device} #{m.mount}" unless mounted?(m.device)
+		task "mount #{m.mount}" do
+			shell "mkdir -p #{m.mount} && mount -o #{mount_options(m)} #{m.device} #{m.mount}" unless mounted?(m.mount)
 		end
 	end
 
@@ -148,8 +165,10 @@ class Kuzushi
 		system.kernel["machine"]
 	end
 
-	def mounted?(dev)
-		!!system.filesystem[File.basename(dev)]["mount"] rescue false
+	def mounted?(mount)
+		## cant use ohai here b/c it mashes drives together with none or tmpfs devices
+		mount = mount.chop if mount =~ /\/$/
+		!!(File.read("/proc/mounts") =~ / #{mount} /)
 	end
 
 	def package_arch
@@ -238,6 +257,7 @@ class Kuzushi
 	def fetch(file, &block)
 		names = @config_names.clone
 		begin
+			## its important that we try each name for the script - allows for polymorphic scripts
 			tmpfile RestClient.get("#{@base_url}/#{names.first}#{file}"), file do |tmp|
 				block.call(tmp)
 			end
