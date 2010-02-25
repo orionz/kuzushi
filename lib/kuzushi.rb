@@ -2,7 +2,6 @@ require 'rubygems'
 require 'json'
 require 'restclient'
 require 'ostruct'
-require 'rush'
 require 'ohai'
 require 'erb'
 
@@ -12,6 +11,8 @@ require 'erb'
 ## ruby 1.9 compatibility
 
 class Kuzushi
+	attr_accessor :config, :config_names
+
 	def initialize(url)
 		@base_url = File.dirname(url)
 		@name = File.basename(url)
@@ -19,8 +20,6 @@ class Kuzushi
 		@configs = []
 		@packages = []
 		@tasks = []
-		load_config_stack(@name)
-		@config = @configs.reverse.inject({}) { |i,c| i.merge(c) }
 	end
 
 	def init
@@ -29,13 +28,14 @@ class Kuzushi
 	end
 
 	def start
+		load_config_stack(@name)
 		process_stack
-		puts "----"
+		log "----"
 		@tasks.each do |t|
-			puts "TASK: #{t[:description]}"
+			log "TASK: #{t[:description]}"
 			t[:blk].call
 		end
-		puts "----"
+		log "----"
 	end
 
 	protected
@@ -46,11 +46,17 @@ class Kuzushi
 		ohai
 	end
 
+	def http_get(url)
+		RestClient.get("#{@base_url}/#{name}")
+	end
+
 	def load_config_stack(name)
 		@config_names << name
-		@configs << JSON.parse(RestClient.get("#{@base_url}/#{name}"))
+		@configs << JSON.parse(http_get("#{@base_url}/#{name}"))
 		if import = @configs.last["import"]
 			load_config_stack(import)
+		else
+			@config = @configs.reverse.inject({}) { |i,c| i.merge(c) }
 		end
 	end
 
@@ -63,6 +69,7 @@ class Kuzushi
 		process :volumes
 		process :files
 		process :users
+		process :crontab
 
 		script get("after")
 		script get("init") if init?
@@ -91,8 +98,11 @@ class Kuzushi
 	def process_packages
 		@packages = get_array("packages")
 		task "install packages" do
-			shell "apt-get update && apt-get upgrade -y"
+#			shell "apt-get update"
 			shell "apt-get install -y #{@packages.join(" ")}" unless @packages.empty?
+#			@packages.each do |pkg|
+#				shell "apt-get install -y #{pkg}"
+#			end
 		end
 	end
 
@@ -172,25 +182,25 @@ class Kuzushi
 		`dpkg --print-architecture`.chomp
 	end
 
+	def erb(data)
+			@system = system
+			ERB.new(data, 0, '<>').result(binding)
+	end
+
 	def process_files(f)
-		if f.template
-			write_file("/templates/#{f.template}", f.file) do |file|
-				@system = system
-				t = ERB.new File.read(file), 0, '<>'
-				t.result(binding)
-			end
-		else
-			src = f.source || File.basename(f.file)
-			write_file("/files/#{src}", f.file) do |file|
-				File.read(file)
+		file(f) do |tmp|
+			task "write #{f.file}" do
+				cp_file(tmp, f.file)
 			end
 		end
 	end
 
-	def write_file(src, dest, &blk)
-		fetch(src) do |file|
-			FileUtils.mkdir_p(File.dirname(dest))
-			File.open(dest,"w") { |f| f.write(blk.call(file)) }
+	def process_crontab(cron)
+		user = cron.user || "root"
+		file(cron) do |tmp|
+			task "process crontab for #{user}" do
+				shell "crontab -u #{user} #{tmp}"
+			end
 		end
 	end
 
@@ -253,22 +263,23 @@ class Kuzushi
 	end
 
 	def tmpfile(content, file = "tmp_#{rand(1_000_000_000)}", &block)
-		tmp_dir = "/tmp/kuzushi"
-		Dir.mkdir(tmp_dir) unless File.exists?(tmp_dir)
-		file = "#{tmp_dir}/#{File.basename(file)}"
-		File.open(file,"w") do |f|
-			f.write(content)
-			f.chmod(0700)
-		end if content
-		block.call(file) if block
-		file
+		path = "/tmp/kuzushi/#{File.basename(file)}"
+		put_file(content, path)
+		block.call(path) if block
+		path
 	end
 
-	def fetch(file, &block)
-		names = @config_names.clone
+	def file(f, &blk)
+		## no magic here - move along
+		fetch("/templates/#{f.template}", lambda { |data| erb data  }, &blk) if f.template 
+		fetch("/files/#{f.source || File.basename(f.file)}", &blk) unless f.template
+	end
+
+	def fetch(file, filter = lambda { |d| d }, &block)
+		names = config_names.clone
 		begin
 			## its important that we try each name for the script - allows for polymorphic scripts
-			tmpfile RestClient.get("#{@base_url}/#{names.first}#{file}"), file do |tmp|
+			tmpfile(filter.call(http_get("#{@base_url}/#{names.first}#{file}")), file) do |tmp|
 				block.call(tmp)
 			end
 		rescue RestClient::ResourceNotFound
@@ -282,10 +293,11 @@ class Kuzushi
 
 	def error(message, exception = nil)
 		puts "ERROR :#{message}"
+		puts exception.message
 	end
 
 	def get(key)
-		@config[key.to_s]
+		config[key.to_s]
 	end
 
 	def get_array(key)
@@ -295,14 +307,14 @@ class Kuzushi
 	def wait_for_volume(vol)
 		## Maybe use ohai here instead -- FIXME
 		until dev_exists? vol do
-			puts "waiting for volume #{vol}"
+			log "waiting for volume #{vol}"
 			sleep 2
 		end
 	end
 
 	def shell(cmd)
-		puts "# #{cmd}"
-		puts Kernel.system cmd ## FIXME - need to handle/report exceptions here
+		log "# #{cmd}"
+		Kernel.system cmd ## FIXME - need to handle/report exceptions here
 	end
 
 	def init?
@@ -316,5 +328,22 @@ class Kuzushi
 
 	def dev_exists?(dev)
 		File.exists?("/sys/block/#{File.basename(dev)}")
+	end
+
+	def cp_file(src, dest)
+		FileUtils.mkdir_p(File.dirname(dest))
+		FileUtils.cp(src, dest)
+	end
+
+	def put_file(data, dest)
+		FileUtils.mkdir_p(File.dirname(dest))
+		File.open(dest,"w") do |f|
+			f.write(data)
+			f.chmod(0700)
+		end
+	end
+
+	def log(message)
+		puts message
 	end
 end
