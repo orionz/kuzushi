@@ -9,6 +9,8 @@ require 'erb'
 
 ## firewall until ready
 ## ruby 1.9 compatibility
+## nested configs
+## user configs
 
 class Kuzushi
 	attr_accessor :config, :config_names
@@ -243,6 +245,17 @@ class Kuzushi
 		end
 	end
 
+
+	def script(scripts)
+		to_array(scripts).each do |s|
+			if s =~ /^#!/
+				inline_script(s)
+			else
+				external_script(s)
+			end
+		end
+	end
+
 	def inline_script(script)
 		tmpfile(script) do |tmp|
 			task "run inline script" do
@@ -251,10 +264,7 @@ class Kuzushi
 		end
 	end
 
-	def script(script)
-		return if script.nil?
-		return inline_script(script) if script =~ /^#!/
-
+	def external_script(script)
 		fetch("/scripts/#{script}") do |file|
 			task "run script #{script}" do
 				shell "#{file}"
@@ -271,7 +281,7 @@ class Kuzushi
 
 	def file(f, &blk)
 		## no magic here - move along
-		fetch("/templates/#{f.template}", lambda { |data| erb data  }, &blk) if f.template 
+		fetch("/templates/#{f.template}", lambda { |data| erb data  }, &blk) if f.template
 		fetch("/files/#{f.source || File.basename(f.file)}", &blk) unless f.template
 	end
 
@@ -301,7 +311,11 @@ class Kuzushi
 	end
 
 	def get_array(key)
-		[ get(key) || [] ].flatten
+		to_array( get(key) )
+	end
+
+	def to_array(value)
+		[ value || [] ].flatten
 	end
 
 	def wait_for_volume(vol)

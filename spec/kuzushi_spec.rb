@@ -77,5 +77,30 @@ describe Kuzushi do
 		@kuzushi.expects(:shell).with("crontab -u root #{tmpfile}")
 		should.not.raise { @kuzushi.start }
 	end
+
+	it "will run external scripts" do
+		@kuzushi.stubs(:config).returns( {
+			"before" => "script.sh"
+			})
+		@kuzushi.expects(:external_script).with("script.sh")
+		should.not.raise { @kuzushi.start }
+	end
+
+	it "will run inline scripts" do
+		@kuzushi.stubs(:config).returns( {
+			"before" => "#!/bin/bash\n echo 'hello'\n"
+			})
+		@kuzushi.expects(:inline_script).with("#!/bin/bash\n echo 'hello'\n")
+		should.not.raise { @kuzushi.start }
+	end
+
+	it "will run sets of scripts" do
+		@kuzushi.stubs(:config).returns( {
+			"before" => [ "script.sh", "#!/bin/bash\n echo 'hello'\n" ]
+			})
+		@kuzushi.expects(:inline_script).with("#!/bin/bash\n echo 'hello'\n")
+		@kuzushi.expects(:external_script).with("script.sh")
+		should.not.raise { @kuzushi.start }
+	end
 end
 
