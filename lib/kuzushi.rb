@@ -297,13 +297,12 @@ class Kuzushi
 			retry unless names.empty?
 			error("file not found: #{file}")
 		rescue Object => e
-			error("error fetching file: #{names.first}/#{file}", e)
+			error("error fetching file: #{names.first}/#{file} : #{e.message}")
 		end
 	end
 
-	def error(message, exception = nil)
+	def error(message)
 		puts "ERROR :#{message}"
-		puts exception.message
 	end
 
 	def get(key)
