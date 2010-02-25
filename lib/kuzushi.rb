@@ -47,7 +47,7 @@ class Kuzushi
 	end
 
 	def http_get(url)
-		RestClient.get("#{@base_url}/#{name}")
+		RestClient.get(url)
 	end
 
 	def load_config_stack(name)

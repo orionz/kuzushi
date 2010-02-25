@@ -4,7 +4,7 @@ describe Kuzushi do
 	before do
 		@url = "http://myurl/foo"
 		@kuzushi = Kuzushi.new(@url)
-		@kuzushi.stubs(:log)
+		@kuzushi.stubs(:log) ## dont want to see the output
 		@kuzushi.stubs(:config_names).returns(["foo"])
 		@kuzushi.stubs(:load_config_stack)
 	end
