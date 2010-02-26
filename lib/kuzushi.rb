@@ -193,6 +193,9 @@ class Kuzushi
 		file(f) do |tmp|
 			task "write #{f.file}" do
 				cp_file(tmp, f.file)
+				shell "chmod #{f.mode} #{f.file}" if f.mode
+				shell "chown #{f.user} #{f.file}" if f.user
+				shell "chgrp #{f.group} #{f.file}" if f.group
 			end
 		end
 	end
