@@ -54,7 +54,7 @@ class Kuzushi
 
 	def load_config_stack(name)
 		@config_names << name
-		@configs << JSON.parse(http_get("#{@base_url}/#{name}"))
+		@configs << JSON.parse(http_get("#{@base_url}/#{name}").body)
 		if import = @configs.last["import"]
 			load_config_stack(import)
 		else
