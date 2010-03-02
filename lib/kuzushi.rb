@@ -233,7 +233,7 @@ class Kuzushi
 		return if v.format == "tmpfs"
 		task "formatting #{v.device}", :init => true do
 			label = "-L " + v.label rescue ""
-			shell "mkfs.#{v.format} #{label} #{v.device}" unless v.mount && mounted?(v.mount)
+			shell "mkfs.#{v.format} -q #{label} #{v.device}" unless v.mount && mounted?(v.mount)
 		end
 		add_package "xfsprogs" if v.format == "xfs"
 	end
