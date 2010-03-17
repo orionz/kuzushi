@@ -2,8 +2,10 @@
   Kuzushi ( ka ZU she ) - a technique used by martial artists to control of an
   opponent by keeping them slightly off balance.
 
-The 'kuzushi' gem is a companion to the 'sumo' gem.  Sumo handles
+The 'kuzushi' gem is a companion to the 'judo' gem.  Judo handles
 AWS/instance/volume management of a server based on its specificatoion.
 Kuzushi handles the management from inside the server by installing packages,
 setting up drives and users, writing config files, etc
+
+See the Judo readme here: http://github.com/orionz/judo
 
