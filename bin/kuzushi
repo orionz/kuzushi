@@ -4,7 +4,7 @@ require File.dirname(__FILE__) + '/../lib/kuzushi'
 
 usage = "usage: kuzushi start URL"
 
-fail(usage) unless ARGV.length == 2
+fail(usage) unless [2].include? ARGV.length
 
 kuzushi = Kuzushi.new(ARGV[1])
 

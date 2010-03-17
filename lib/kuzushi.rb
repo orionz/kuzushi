@@ -13,12 +13,15 @@ require 'erb'
 ## user configs
 
 class Kuzushi
-	attr_accessor :config, :config_names
+	attr_accessor :config
 
 	def initialize(url)
+		@url = url
 		@base_url = File.dirname(url)
-		@name = File.basename(url)
-		@config_names = []
+		if @url =~ /s3.amazonaws.com.*\/([^\/]*)[.](\d+)[.]tar[.]gz/
+			@name = $1
+			@version = $2
+		end
 		@configs = []
 		@packages = []
 		@tasks = []
@@ -29,8 +32,19 @@ class Kuzushi
 		start
 	end
 
+	def boot
+		shell "mkdir -p /tmp/kuzushi/"
+		shell "cd /tmp/kuzushi/ ; curl --silent '#{@url}' | tar xzv"
+		@config = JSON.parse(File.read("/tmp/kuzushi/#{@name}/config.json"))
+	end
+
 	def start
-		load_config_stack(@name)
+#		load_config_stack(@name)
+		boot
+		run
+	end
+
+	def run
 		process_stack
 		log "----"
 		@tasks.each do |t|
@@ -50,16 +64,6 @@ class Kuzushi
 
 	def http_get(url)
 		RestClient.get(url)
-	end
-
-	def load_config_stack(name)
-		@config_names << name
-		@configs << JSON.parse(http_get("#{@base_url}/#{name}").body)
-		if import = @configs.last["import"]
-			load_config_stack(import)
-		else
-			@config = @configs.reverse.inject({}) { |i,c| i.merge(c) }
-		end
 	end
 
 	def process_stack
@@ -100,11 +104,7 @@ class Kuzushi
 	def process_packages
 		@packages = get_array("packages")
 		task "install packages" do
-#			shell "apt-get update"
 			shell "apt-get install -y #{@packages.join(" ")}" unless @packages.empty?
-#			@packages.each do |pkg|
-#				shell "apt-get install -y #{pkg}"
-#			end
 		end
 	end
 
@@ -270,7 +270,7 @@ class Kuzushi
 	def external_script(script)
 		fetch("/scripts/#{script}") do |file|
 			task "run script #{script}" do
-				shell "#{file}"
+				shell "chmod +x #{file} ; #{file}"
 			end
 		end
 	end
@@ -288,19 +288,14 @@ class Kuzushi
 		fetch("/files/#{f.source || File.basename(f.file)}", &blk) unless f.template
 	end
 
+	### this needs to be brought up to date - way last version - no need to read and filter...
 	def fetch(file, filter = lambda { |d| d }, &block)
-		names = config_names.clone
 		begin
-			## its important that we try each name for the script - allows for polymorphic scripts
-			tmpfile(filter.call(http_get("#{@base_url}/#{names.first}#{file}")), file) do |tmp|
+			tmpfile(filter.call(File.read("/tmp/kuzushi/#{@name}/#{file}")), file) do |tmp|
 				block.call(tmp)
 			end
-		rescue RestClient::ResourceNotFound
-			names.shift
-			retry unless names.empty?
-			error("file not found: #{file}")
 		rescue Object => e
-			error("error fetching file: #{names.first}/#{file} : #{e.message}")
+			error("error fetching file: #{file} : #{e.message}")
 		end
 	end
 
