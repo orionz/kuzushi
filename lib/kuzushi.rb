@@ -74,6 +74,7 @@ class Kuzushi
     process :gems
     process :volumes
     process :files
+    process :services
     process :users
     process :crontab
 
@@ -99,6 +100,23 @@ class Kuzushi
         script item["init"] if init?
       end
     end
+  end
+
+  def service_file(service)
+    file = []
+    file << "start on stopped rc RUNLEVEL=[2345]"
+    file << "stop on runlevel [!2345]"
+    file << "respawn" unless service.respawn == false
+    if service.user
+      file << "exec su -c '#{service.command}' #{service.user}"  ## TODO add shell escaping here
+    else
+      file << "exec #{service.command}"
+    end
+  end
+
+  def process_service(service)
+    put_file(service_file(service), "/etc/init/#{service.name}.conf")
+    shell "service #{service.name} start"
   end
 
   def process_packages
@@ -300,7 +318,7 @@ class Kuzushi
     shell "cd dir && git remote add origin #{f.git}"
     shell "cd dir && git fetch"
     shell "cd dir && git checkout master"
-    shell "chown -R #{f.user}:#{f.group} #{f.dir}" if f.user || f.group
+    shell "chown -R #{f.user}:#{f.group} #{f.dir}" if f.user || f.group  ## is this needed?  handled above in files?
   end
 
   ### this needs to be brought up to date - way last version - no need to read and filter...
