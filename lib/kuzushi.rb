@@ -305,7 +305,7 @@ class Kuzushi
     ## no magic here - move along
     if f.template
       fetch("/templates/#{f.template}", lambda { |data| erb data  }, &blk)
-    else f.git
+    elsif f.git
       git_fetch(f)
     else
       fetch("/files/#{f.source || File.basename(f.file)}", &blk) unless f.template
