@@ -109,14 +109,14 @@ class Kuzushi
     file = []
     file << "start on stopped rc RUNLEVEL=[2345]"
     file << "stop on runlevel [!2345]"
-    filt << ""
+    file << ""
     file << "respawn" unless service.respawn == false
     if service.user
       file << "exec su - -c '#{service.command}' #{service.user}"  ## TODO add shell escaping here
     else
       file << "exec #{service.command}"
     end
-    filt << ""
+    file << ""
     file.join("\n") 
   end
 
