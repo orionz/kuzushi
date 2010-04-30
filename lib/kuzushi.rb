@@ -234,7 +234,7 @@ class Kuzushi
   end
 
   def process_users(user)
-    shell "useradd -m #{user}" ## this will just fail for users like 'root'
+    shell "useradd -m #{user.name}" ## this will just fail for users like 'root'
     (user.authorized_keys || []).each do |key|
       task "add authorized_key for user #{user.name}" do
         shell "su - #{user.name} -c 'mkdir -p .ssh; echo \"#{key}\" >> .ssh/authorized_keys; chmod -R 0600 .ssh'"
