@@ -109,18 +109,20 @@ class Kuzushi
     file = []
     file << "start on stopped rc RUNLEVEL=[2345]"
     file << "stop on runlevel [!2345]"
+    filt << ""
     file << "respawn" unless service.respawn == false
     if service.user
-      file << "exec su -c '#{service.command}' #{service.user}"  ## TODO add shell escaping here
+      file << "exec su - -c '#{service.command}' #{service.user}"  ## TODO add shell escaping here
     else
       file << "exec #{service.command}"
     end
-    file.join("\n")
+    filt << ""
+    file.join("\n") 
   end
 
   def process_services(service)
     task "installing service #{service.name}" do
-      put_file(service_file(service), "/etc/init/#{service.name}.conf")
+      put_file(service_file(service), "/etc/init/#{service.name}.conf", 0600)
       shell "service #{service.name} start"
     end
   end
@@ -387,11 +389,11 @@ class Kuzushi
     FileUtils.cp(src, dest)
   end
 
-  def put_file(data, dest)
+  def put_file(data, dest, mode = 0700)
     FileUtils.mkdir_p(File.dirname(dest))
     File.open(dest,"w") do |f|
       f.write(data)
-      f.chmod(0700)
+      f.chmod(mode)
     end
   end
 
