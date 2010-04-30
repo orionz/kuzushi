@@ -15,6 +15,9 @@ require 'erb'
 class Kuzushi
   attr_accessor :config
 
+  def self.version
+  end
+
   def initialize(url)
     @url = url
     @base_url = File.dirname(url)
@@ -74,9 +77,9 @@ class Kuzushi
     process :gems
     process :volumes
     process :files
-    process :services
     process :users
     process :crontab
+    process :services
 
     script get("after")
     script get("init") if init?
@@ -112,11 +115,14 @@ class Kuzushi
     else
       file << "exec #{service.command}"
     end
+    file.join("\n")
   end
 
-  def process_service(service)
-    put_file(service_file(service), "/etc/init/#{service.name}.conf")
-    shell "service #{service.name} start"
+  def process_services(service)
+    task "installing service #{service.name}" do
+      put_file(service_file(service), "/etc/init/#{service.name}.conf")
+      shell "service #{service.name} start"
+    end
   end
 
   def process_packages
@@ -313,12 +319,14 @@ class Kuzushi
   end
 
   def git_fetch(f)
-    FileUtils.mkdir_p(f.dir)
-    shell "cd dir && git init"
-    shell "cd dir && git remote add origin #{f.git}"
-    shell "cd dir && git fetch"
-    shell "cd dir && git checkout master"
-    shell "chown -R #{f.user}:#{f.group} #{f.dir}" if f.user || f.group  ## is this needed?  handled above in files?
+    task "install packages" do
+      FileUtils.mkdir_p(f.file)
+      shell "cd #{f.file} && git init"
+      shell "cd #{f.file} && git remote add origin #{f.git}"
+      shell "cd #{f.file} && git fetch"
+      shell "cd #{f.file} && git checkout master"
+      shell "chown -R #{f.user}:#{f.group} #{f.dir}" if f.user || f.group  ## is this needed?  handled above in files?
+    end
   end
 
   ### this needs to be brought up to date - way last version - no need to read and filter...
