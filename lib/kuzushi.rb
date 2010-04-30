@@ -323,9 +323,9 @@ class Kuzushi
       FileUtils.mkdir_p(f.file)
       shell "cd #{f.file} && git init"
       shell "cd #{f.file} && git remote add origin #{f.git}"
-      shell "cd #{f.file} && git fetch"
-      shell "cd #{f.file} && git checkout master"
-      shell "chown -R #{f.user}:#{f.group} #{f.dir}" if f.user || f.group  ## is this needed?  handled above in files?
+      shell "cd #{f.file} && git fetch origin"
+      shell "cd #{f.file} && git checkout -b master --track origin/master"
+      shell "chown -R #{f.user}:#{f.group} #{f.file}" if f.user || f.group  ## is this needed?  handled above in files?
     end
   end
 
