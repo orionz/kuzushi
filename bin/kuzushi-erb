@@ -4,7 +4,7 @@ require 'ohai'
 require 'json'
 
 @system = Ohai::System.new.all_plugins
-@config = JSON.parse(File.read("/tmp/kuzushi/#{@name}/config.json")
+@config = JSON.parse(File.read("config.json") if File.exists?("config.json")
 
 ERB.new(File.read(ARGV[0], 0, '<>').result(binding)
 

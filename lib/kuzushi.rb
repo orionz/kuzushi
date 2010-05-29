@@ -18,16 +18,19 @@ class Kuzushi
   def self.version
   end
 
-  def initialize(url)
-    @url = url
-    @base_url = File.dirname(url)
-    if @url =~ /s3.amazonaws.com.*\/([^\/]*)[.](\d+)[.]tar[.]gz/
-      @name = $1
-      @version = $2
+  def initialize(url = nil)
+    if url
+      @url = url
+      @base_url = File.dirname(url)
+      if @url =~ /s3.amazonaws.com.*\/([^\/]*)[.](\d+)[.]tar[.]gz/
+        @name = $1
+        @version = $2
+      end
+      @scripts = true
+      @configs = []
+      @packages = []
+      @tasks = []
     end
-    @configs = []
-    @packages = []
-    @tasks = []
   end
 
   def init
@@ -47,14 +50,29 @@ class Kuzushi
     run
   end
 
+  def setup
+    @init = (ENV['JUDO_FIRSTBOOT'] == "true")
+    @config = JSON.parse(File.read("config.json"))
+    @scripts = false
+
+    process :packages
+    process :volumes
+
+    execute_tasks
+  end
+
   def run
     process_stack
-    log "----"
+    execute_tasks
+  end
+
+  def execute_tasks
+    log "---- BEGIN KUZUSHI "
     @tasks.each do |t|
       log "TASK: #{t[:description]}"
       t[:blk].call
     end
-    log "----"
+    log "---- END KUZUSHI "
   end
 
   protected
@@ -277,6 +295,7 @@ class Kuzushi
 
 
   def script(scripts)
+    return unless @scripts
     to_array(scripts).each do |s|
       if s =~ /^#!/
         inline_script(s)
