@@ -27,10 +27,10 @@ class Kuzushi
         @version = $2
       end
       @scripts = true
-      @configs = []
-      @packages = []
-      @tasks = []
     end
+    @configs = []
+    @packages = []
+    @tasks = []
   end
 
   def init
@@ -51,8 +51,8 @@ class Kuzushi
   end
 
   def setup
-    @init = (ENV['JUDO_FIRSTBOOT'] == "true")
-    @config = JSON.parse(File.read("config.json"))
+    @init    = (ENV['JUDO_FIRSTBOOT'] == "true")
+    @config  = JSON.parse(File.read("config.json"))
     @scripts = false
 
     process :packages
@@ -109,7 +109,7 @@ class Kuzushi
     if method("process_#{type}").arity == 0
       send("process_#{type}")
     else
-    ## else call it once per item
+      ## else call it once per item
       get_array(type).each do |item|
         script item["before"]
         if item.is_a? Hash
@@ -148,6 +148,8 @@ class Kuzushi
   def process_packages
     @packages = get_array("packages")
     task "install packages" do
+      ENV['DEBIAN_FRONTEND'] = "noninteractive"
+      ENV['DEBIAN_PRIORITY'] = "critical"
       shell "apt-get install -y #{@packages.join(" ")}" unless @packages.empty?
     end
   end
@@ -183,13 +185,15 @@ class Kuzushi
 
   def handle_raid(r)
     task "create raid #{r.device}", :init => true do
+      shell "service udev stop"
       shell "mdadm --create #{r.device} -n #{r.drives.size} -l #{r.level} -c #{r.chunksize || 64} #{r.drives.join(" ")}"
+      shell "service udev start"
     end
     task "assemble raid #{r.device}" do  ## assemble fails a lot with device busy - is udev to blame :(
       if not dev_exists? r.device
-        shell "service stop udev"
+        shell "service udev stop"
         shell "mdadm --assemble #{r.device} #{r.drives.join(" ")}"
-        shell "service start udev"
+        shell "service udev start"
       end
     end
     add_package "mdadm"

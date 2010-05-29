@@ -7,9 +7,8 @@ Jeweler::Tasks.new do |s|
 	s.author = "Orion Henry"
 	s.email = "orion@heroku.com"
 	s.homepage = "http://github.com/orionhenry/kuzushi"
-#	s.rubyforge_project = "sumo"
 	s.files = FileList["[A-Z]*", "{bin,lib,spec}/**/*"]
-	s.executables = %w(kuzushi yawara)
+	s.executables = %w(kuzushi kuzushi-setup kuzushi-erb)
 	s.add_dependency "rest-client"
 	s.add_dependency "ohai"
 end
