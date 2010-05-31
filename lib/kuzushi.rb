@@ -51,7 +51,7 @@ class Kuzushi
   end
 
   def setup
-    @init    = (ENV['JUDO_FIRSTBOOT'] == "true")
+    @init    = (ENV['JUDO_FIRST_BOOT'] == "true")
     @config  = JSON.parse(File.read("config.json"))
     @scripts = false
 

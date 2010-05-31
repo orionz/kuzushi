@@ -1,10 +1,12 @@
 #!/usr/bin/env ruby
+require 'rubygems'
 require 'erb'
 require 'ohai'
 require 'json'
 
-@system = Ohai::System.new.all_plugins
-@config = JSON.parse(File.read("config.json") if File.exists?("config.json")
+@system = Ohai::System.new
+@system.all_plugins
+@config = JSON.parse(File.read("config.json")) if File.exists?("config.json")
 
-ERB.new(File.read(ARGV[0], 0, '<>').result(binding)
+puts ERB.new(File.read(ARGV[0]), 0, '<>').result(binding)
 
